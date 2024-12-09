@@ -1,0 +1,124 @@
+services:
+  postgres:
+    image: postgres:latest
+    container_name: postgres
+    environment:
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - "127.0.0.1:6379:6379"
+    networks:
+      - backend
+
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    env_file: .minio-env
+    command: server /minio-data --console-address ":9001"
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - "./minio-data:/minio-data"
+    networks:
+       - backend
+
+  users:
+    build:
+      context: ./users
+    container_name: users
+    env_file: ./users/.env
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  storage:
+    build:
+      context: ./storage
+    container_name: storage
+    env_file: ./storage/.env
+    networks:
+      - backend
+    depends_on:
+      - minio
+
+  authorization:
+    build:
+      context: ./authorization
+    container_name: authorization
+    env_file: ./authorization/.env
+    networks:
+      - backend
+    depends_on:
+      - redis
+
+  gateway:
+    build:
+      context: ./gateway
+    env_file: ./gateway/.env
+    networks:
+      - backend
+    depends_on:
+      - authorization
+      - storage
+      - users
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.gateway.rule=PathPrefix(`/api`)"
+      - "traefik.http.routers.gateway.entrypoints=backend"
+      - "traefik.http.services.gateway.loadbalancer.server.port=8989"
+    deploy:
+      replicas: 3
+      restart_policy:
+        condition: on-failure
+
+  traefik:
+    image: traefik:v3.2.1
+    container_name: traefik
+    volumes:
+      - "./traefik.yml:/etc/traefik/traefik.yml"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "80:80"
+      - "8989:8989"
+    networks:
+      - backend
+      - frontend
+    depends_on:
+      - frontend
+      - gateway
+
+  frontend:
+    image: nginx
+    container_name: frontend
+    env_file:
+      - ./frontend/.env
+    volumes:
+      - "./frontend/build:/usr/share/nginx/html"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.frontend.entrypoints=web"
+    networks:
+      - frontend
+
+networks:
+  backend:
+    driver: bridge
+  frontend:
+    driver: bridge

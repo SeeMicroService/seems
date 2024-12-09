@@ -1,0 +1,15 @@
+[submodule "users"]
+	path = users
+	url = https://github.com/SeeMicroService/users
+[submodule "storage"]
+	path = storage
+	url = https://github.com/SeeMicroService/storage
+[submodule "authorization"]
+	path = authorization
+	url = https://github.com/SeeMicroService/authorization
+[submodule "frontend"]
+	path = frontend
+	url = https://github.com/SeeMicroService/frontend
+[submodule "gateway"]
+	path = gateway
+	url = https://github.com/SeeMicroService/gateway
